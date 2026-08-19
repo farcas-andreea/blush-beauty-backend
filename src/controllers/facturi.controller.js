@@ -1,5 +1,6 @@
 const { query, pool } = require('../config/db');
 const asyncHandler = require('../utils/asyncHandler');
+const { scrieFacturaPdf } = require('../utils/facturaPdf');
 
 const TVA_PROCENT = 0.19;
 
@@ -40,6 +41,24 @@ const detaliuFactura = asyncHandler(async (req, res) => {
         req.params.id
     ]);
     res.json({ ...factura, linii });
+});
+
+// GET /api/facturi/:id/pdf -> descarca factura ca document PDF
+const descarcaFacturaPdf = asyncHandler(async (req, res) => {
+    const { rows } = await query(`${SELECT_FACTURA} WHERE f.id = $1`, [req.params.id]);
+    const factura = rows[0];
+    if (!factura) return res.status(404).json({ mesaj: 'Factura nu a fost gasita.' });
+
+    if (req.user.rol === 'client' && factura.client_id !== req.user.id) {
+        return res.status(403).json({ mesaj: 'Nu ai acces la aceasta factura.' });
+    }
+
+    const { rows: linii } = await query('SELECT * FROM factura_linii WHERE factura_id = $1 ORDER BY id', [
+        req.params.id
+    ]);
+    const { rows: setariRows } = await query('SELECT * FROM setari_salon WHERE id = 1');
+
+    scrieFacturaPdf(res, factura, linii, setariRows[0]);
 });
 
 // GET /api/facturi/proprii -> facturile clientului autentificat
@@ -183,6 +202,7 @@ const actualizeazaStatusFactura = asyncHandler(async (req, res) => {
 module.exports = {
     listaFacturi,
     detaliuFactura,
+    descarcaFacturaPdf,
     facturileMele,
     creeazaFactura,
     actualizeazaStatusFactura
